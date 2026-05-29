@@ -1,0 +1,6 @@
+{
+  "name": "sda-pro-audit-service",
+  "version": "1.0.0",
+  "description": "Audit Service with immutable logging",
+  "main": "src/services/AuditService.js"
+}
