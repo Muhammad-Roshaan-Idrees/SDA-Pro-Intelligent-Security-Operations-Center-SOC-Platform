@@ -1,0 +1,12 @@
+{
+  "name": "sda-pro-notification-service",
+  "version": "1.0.0",
+  "description": "Notification Service with Abstract Factory pattern for Email/Slack/PagerDuty",
+  "main": "src/services/NotificationService.js",
+  "scripts": {
+    "start": "node src/services/NotificationService.js",
+    "test": "jest"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
