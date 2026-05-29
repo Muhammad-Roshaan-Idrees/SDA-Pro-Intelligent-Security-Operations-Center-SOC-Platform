@@ -1,0 +1,130 @@
+@startuml SDA-Pro_Sequence_Response
+!theme plain
+autonumber
+title Sequence: Incident Response Orchestration
+(Facade, Strategy, Decorator, State, Observer, Adapter)
+actor "SOC Analyst" as Analyst
+participant "SOC Dashboard
+(View)" as View
+participant "IncidentController" as Ctrl
+participant "ResponseOrchestrationService" as ROS
+participant "IncidentResponseFacade
+(Facade)" as Facade
+participant "Incident" as Incident
+participant "UnderTriageState
+(State)" as TriageSt
+participant "ContainmentState
+(State)" as ContainSt
+participant "ResponseStrategySelector
+(Strategy)" as StratSel
+participant "AggressiveContainmentStrategy
+(Strategy)" as Strat
+participant "ResponseActionFactory
+(Factory Method)" as Fact
+participant "BlockIPAction" as Action
+participant "AuditLogDecorator
+(Decorator)" as Dec1
+participant "ApprovalGateDecorator
+(Decorator)" as Dec2
+participant "MetricsDecorator
+(Decorator)" as Dec3
+participant "ResponseActionProxy
+(Proxy)" as Proxy
+participant "PaloAltoAdapter
+(Adapter)" as PAAd
+participant "EventBusPublisher
+(Singleton + Observer)" as EB
+participant "NotificationDispatcher
+(Observer)" as NotifObs
+participant "DashboardUpdater
+(Observer)" as DashObs
+database "PostgreSQL" as DB
+queue "RabbitMQ" as MQ
+== 1. Analyst Triggers Response ==
+Analyst -> View : Click "Execute Response Plan"
+View -> Ctrl : POST /incidents/{id}/respond
+Ctrl -> ROS : assessAndRespond(incidentId)
+== 2. Facade Coordinates ==
+ROS -> Facade : assessAndRespond(incidentId)
+Facade -> DB : load incident
+DB --> Facade : Incident
+== 3. State Transition — Triage to Containment ==
+Facade -> Incident : getCurrentState()
+Incident --> Facade : UnderTriageState
+Facade -> TriageSt : initiateContainment(incident, actions)
+TriageSt -> TriageSt : validateAnalystAuthorization()
+TriageSt -> Incident : setState(ContainmentState)
+Incident -> ContainSt : onEnter(incident)
+ContainSt -> ContainSt : logStateTransition()
+== 4. Strategy Selection ==
+Facade -> StratSel : selectStrategy(incident)
+StratSel -> StratSel : evaluateSeverity(CRITICAL)
+StratSel -> StratSel : evaluateAssetCriticality(HIGH)
+StratSel --> Facade : AggressiveContainmentStrategy
+== 5. Strategy Determines Actions ==
+Facade -> Strat : determineActions(incident, context)
+Strat -> Strat : analyzeAttackVector()
+Strat -> Strat : recommendIsolation()
+Strat --> Facade : List<ResponseAction> [BlockIP, IsolateEndpoint]
+== 6. Factory + Decorator Pipeline ==
+loop For each action in plan
+Facade -> Fact : createAction(BLOCK_IP)
+Fact -> Action : new BlockIPAction(ip, duration)
+Fact --> Facade : action
+Facade -> Dec1 : new AuditLogDecorator(action)
+Facade -> Dec2 : new ApprovalGateDecorator(dec1)
+Facade -> Dec3 : new MetricsDecorator(dec2)
+Facade --> Facade : decoratedAction = dec3
+== 7. Decorator Execution Chain ==
+Facade -> Dec3 : execute(target)
+activate Dec3
+Dec3 -> Dec3 : recordMetrics()
+Dec3 -> Dec2 : execute(target)
+activate Dec2
+Dec2 -> Dec2 : checkApprovalRequired()
+Dec2 -> Dec2 : approvalGranted = true
+Dec2 -> Dec1 : execute(target)
+activate Dec1
+Dec1 -> Dec1 : preActionAuditLog()
+Dec1 -> Action : execute(target)
+activate Action
+Action -> Proxy : blockIP(ip, duration)
+Proxy -> Proxy : validatePermissions()
+Proxy -> PAAd : sendBlockCommand(ip, duration)
+PAAd -> PAAd : mapToPaloAltoFormat()
+PAAd --> Proxy : success
+Proxy --> Action : ActionOutcome.SUCCESS
+Action --> Dec1 : outcome
+deactivate Action
+Dec1 -> Dec1 : postActionAuditLog()
+Dec1 --> Dec2 : outcome
+deactivate Dec1
+Dec2 --> Dec3 : outcome
+deactivate Dec2
+Dec3 -> Dec3 : recordCompletionMetrics()
+Dec3 --> Facade : outcome
+deactivate Dec3
+Facade -> Incident : recordActionOutcome(outcome)
+end
+== 8. State Check — Auto-Transition? ==
+Facade -> ContainSt : evaluateAutoTransition(incident)
+ContainSt -> ContainSt : allContainmentActionsSuccessful()
+ContainSt -> Incident : setState(EradicationState)
+Incident -> DB : persist()
+== 9. Observer — Event Publication ==
+Facade -> EB : publishResponseActionExecuted(incident, outcomes)
+EB -> MQ : push "ResponseActionExecuted" event
+par Parallel Observer Reactions
+MQ -> DashObs : consume event
+DashObs -> View : WebSocket push
+View --> Analyst : Show "Containment Complete"
+MQ -> NotifObs : consume event
+NotifObs -> NotifObs : evaluateEscalation()
+NotifObs -> NotifObs : sendPagerDutyAlert()
+end
+== 10. Response Chain ==
+Facade --> ROS : ResponsePlanResult
+ROS --> Ctrl : ResponseDTO
+Ctrl --> View : 200 OK + updated incident
+View --> Analyst : Display success + next steps
+@enduml

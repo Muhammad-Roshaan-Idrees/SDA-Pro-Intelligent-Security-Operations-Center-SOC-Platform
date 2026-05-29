@@ -1,0 +1,116 @@
+@startuml SDA-Pro_Sequence_Ingestion
+!theme plain
+autonumber
+title Sequence: Alert Ingestion → Enrichment → Incident Creation
+(Composite, Factory Method, Chain of Responsibility, State, Observer)
+actor "Splunk SIEM" as Splunk
+participant "AlertIngestionService" as AIS
+participant "AlertNormalizerFactory
+(Factory Method)" as Fact
+participant "SplunkNormalizer" as Norm
+participant "AlertCampaign
+(Composite)" as Campaign
+participant "SingleAlert" as Alert
+participant "EnrichmentPipeline
+(CoR Assembler)" as Pipe
+participant "DeduplicationHandler
+(CoR: H1)" as H1
+participant "GeoIPHandler
+(CoR: H2)" as H2
+participant "ThreatIntelHandler
+(CoR: H3)" as H3
+participant "ClassificationHandler
+(CoR: H4)" as H4
+participant "ThreatIntelProxy
+(Proxy)" as Proxy
+participant "VirusTotalAdapter
+(Adapter)" as VTAd
+participant "EnrichmentService" as ECS
+participant "CorrelationStrategy
+(Strategy)" as Strat
+participant "IncidentManagementService" as IMS
+participant "NewState
+(State)" as NewSt
+participant "Incident" as Incident
+participant "EventBusPublisher
+(Singleton + Observer)" as EB
+participant "DashboardUpdater
+(Observer)" as DashObs
+participant "AuditLogger
+(Observer)" as AuditObs
+database "PostgreSQL" as DB
+queue "RabbitMQ" as MQ
+== 1. Alert Ingestion ==
+Splunk -> AIS : POST /ingest/splunk (webhook)
+AIS -> AIS : validateSourceAuth()
+== 2. Factory Method — Normalize ==
+AIS -> Fact : createNormalizer(SPLUNK)
+Fact -> Norm : new SplunkNormalizer()
+Fact --> AIS : normalizer
+AIS -> Norm : normalize(rawPayload)
+Norm -> Norm : mapSplunkSchemaToCanonical()
+Norm --> AIS : CanonicalAlert
+== 3. Composite — Group into Campaign ==
+AIS -> Campaign : new AlertCampaign("APT29-Campaign")
+AIS -> Campaign : add(alert)
+Campaign -> Alert : new SingleAlert(canonicalData)
+Campaign --> AIS : compositeAlert
+== 4. Chain of Responsibility — Enrichment Pipeline ==
+AIS -> Pipe : assemblePipeline()
+Pipe -> H1 : setNext(H2)
+H1 -> H2 : setNext(H3)
+H2 -> H3 : setNext(H4)
+AIS -> H1 : handle(campaign)
+H1 -> H1 : checkDuplicate(campaign)
+H1 -> H1 : not duplicate
+H1 -> H2 : doHandle(campaign)
+H2 -> H2 : enrichGeoIP(campaign)
+H2 -> H2 : addLocationContext()
+H2 -> H3 : doHandle(campaign)
+H3 -> Proxy : checkReputation(ip, IP_ADDRESS)
+Proxy -> Proxy : checkCache()
+alt Cache miss
+Proxy -> VTAd : queryVirusTotal(ip)
+VTAd -> VTAd : mapToCanonicalFormat()
+VTAd --> Proxy : reputationScore
+Proxy -> Proxy : cacheResult()
+else Cache hit
+Proxy --> H3 : cachedReputation
+end
+Proxy --> H3 : ReputationResult.MALICIOUS
+H3 -> H3 : addThreatContext()
+H3 -> H4 : doHandle(campaign)
+H4 -> H4 : classifySeverity(campaign)
+H4 -> H4 : severity = CRITICAL
+H4 --> Pipe : EnrichmentResult.COMPLETE
+== 5. Strategy — Correlation ==
+Pipe --> AIS : enrichedCampaign
+AIS -> ECS : processEnrichedAlert(campaign)
+ECS -> Strat : correlate(enrichedCampaign)
+Strat -> Strat : patternMatch("lateral-movement")
+Strat -> Strat : exceedsThreshold(3, CRITICAL)
+Strat --> ECS : CorrelationResult.CREATE_INCIDENT
+== 6. State — Incident Creation ==
+ECS -> IMS : createIncident(campaign, correlationResult)
+IMS -> Incident : new Incident(campaign)
+Incident -> Incident : setState(NewState)
+NewSt -> NewSt : onEnter(incident)
+NewSt -> NewSt : scheduleAutoTriage(incident, 5min)
+Incident --> IMS : incident
+IMS -> DB : INSERT incident
+== 7. Observer — Event Publication ==
+IMS -> EB : publishIncidentCreated(incident)
+EB -> MQ : push "IncidentCreated" event
+par Parallel Observer Reactions
+MQ -> DashObs : consume event
+DashObs -> DashObs : updateIncidentQueue()
+DashObs --> Analyst : WebSocket push (new incident)
+end
+MQ -> AuditObs : consume event
+AuditObs -> AuditObs : logIncidentCreation()
+AuditObs -> DB : INSERT audit trail
+== 8. Response ==
+IMS --> ECS : incidentId
+ECS --> AIS : success
+AIS --> Splunk : 202 Accepted
+@enduml

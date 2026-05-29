@@ -1,0 +1,431 @@
+@startuml SDA-Pro_Class_Diagram
+!theme plain
+skinparam packageStyle rectangle
+skinparam linetype ortho
+title SDA-Pro — Comprehensive Class Diagram (All 12 Patterns) '
+============================================================
+' PACKAGE: domain.alert — Composite Pattern
+' ============================================================
+package "domain.alert (Composite)" #LightCoral {
+interface AlertComponent {
++getId(): UUID
++getSeverity(): Severity
++getTimestamp(): Instant
++accept(visitor: AlertVisitor): void
++add(component: AlertComponent): void
++remove(component: AlertComponent): void
++getChildren(): List<AlertComponent>
+}
+abstract class AbstractAlert {
+-id: UUID
+-severity: Severity
+-timestamp: Instant
+-source: AlertSource
++getId(): UUID
++getSeverity(): Severity
+}
+class SingleAlert {
+-rawPayload: JsonNode
+-normalizedData: CanonicalAlert
++accept(visitor: AlertVisitor): void
+}
+class AlertCampaign {
+-campaignName: String
+-attackPattern: String
+-children: List<AlertComponent>
++add(component: AlertComponent): void
++remove(component: AlertComponent): void
++getChildren(): List<AlertComponent>
++accept(visitor: AlertVisitor): void
++getMaxSeverity(): Severity
+}
+class IncidentCluster {
+-clusterId: UUID
+-correlationRule: String
+-children: List<AlertComponent>
++add(component: AlertComponent): void
++remove(component: AlertComponent): void
++getChildren(): List<AlertComponent>
++accept(visitor: AlertVisitor): void
+}
+AlertComponent <|-- AbstractAlert
+AbstractAlert <|-- SingleAlert
+AbstractAlert <|-- AlertCampaign
+AbstractAlert <|-- IncidentCluster
+AlertCampaign "0..*" o-- "1" AlertComponent : children >
+IncidentCluster "0..*" o-- "1" AlertComponent : children >
+}
+' ============================================================
+' PACKAGE: domain.incident — State Pattern
+' ============================================================
+package "domain.incident (State)" #LightBlue {
+class Incident {
+-id: UUID
+-currentState: IncidentState
+-affectedAlerts: AlertComponent
+-createdAt: Instant
++setState(state: IncidentState): void
++beginTriage(analystId: UUID): void
++initiateContainment(actions: List<ResponseAction>): void
++beginEradication(): void
++beginRecovery(): void
++close(report: PostIncidentReport): void
++escalate(reason: String): void
++getState(): IncidentState
+}
+interface IncidentState {
++beginTriage(incident: Incident, analystId: UUID): void
++initiateContainment(incident: Incident, actions: List<ResponseAction>): void
++beginEradication(incident: Incident): void
++beginRecovery(incident: Incident): void
++close(incident: Incident, report: PostIncidentReport): void
++escalate(incident: Incident, reason: String): void
++getName(): String
++getAllowedActions(): List<ResponseActionType>
+}
+class NewState
+class UnderTriageState
+class ContainmentState
+class EradicationState
+class RecoveryState
+class PostIncidentReviewState
+class ClosedState
+Incident --> IncidentState
+IncidentState <|.. NewState
+IncidentState <|.. UnderTriageState
+IncidentState <|.. ContainmentState
+IncidentState <|.. EradicationState
+IncidentState <|.. RecoveryState
+IncidentState <|.. PostIncidentReviewState
+IncidentState <|.. ClosedState
+}
+' ============================================================
+' PACKAGE: execution.response — Strategy + Factory + Decorator + Facade
+' ============================================================
+package "execution.response (Strategy + Factory + Decorator + Facade)" #LightGreen {
+interface ResponseStrategy {
++determineActions(incident: Incident, context: ResponseContext): List<ResponseActi
++getName(): String
++getDescription(): String
+}
+class AggressiveContainmentStrategy
+class BalancedResponseStrategy
+class ConservativeStrategy
+class WatchAndWaitStrategy
+class ResponseActionFactory {
++{static} createAction(type: ResponseActionType, params: Map): ResponseAction
+}
+interface ResponseAction {
++execute(target: TargetAsset): ActionOutcome
++getType(): ResponseActionType
++isReversible(): boolean
++rollback(): RollbackOutcome
+}
+class IsolateEndpointAction
+class BlockIPAction
+class DisableUserAction
+class QuarantineFileAction
+class EscalateAction
+abstract class ResponseActionDecorator {
+-wrappedAction: ResponseAction
++execute(target: TargetAsset): ActionOutcome
++rollback(): RollbackOutcome
+}
+class ApprovalGateDecorator {
+-approvalService: ApprovalService
++execute(target: TargetAsset): ActionOutcome
+}
+class AuditLogDecorator {
+-auditService: AuditService
++execute(target: TargetAsset): ActionOutcome
+}
+class RollbackCapabilityDecorator {
+-snapshotService: SnapshotService
++execute(target: TargetAsset): ActionOutcome
++rollback(): RollbackOutcome
+}
+class MetricsDecorator {
+-metricsService: MetricsService
++execute(target: TargetAsset): ActionOutcome
+}
+class IncidentResponseFacade {
+-incidentService: IncidentService
+-strategySelector: ResponseStrategySelector
+-actionFactory: ResponseActionFactory
+-eventPublisher: EventBusPublisher
++assessAndRespond(incidentId: UUID): ResponsePlan
++executeResponsePlan(plan: ResponsePlan): ExecutionResult
++rollbackActions(incidentId: UUID): RollbackResult
++getResponseHistory(incidentId: UUID): List<ActionOutcome>
+}
+ResponseStrategy <|.. AggressiveContainmentStrategy
+ResponseStrategy <|.. BalancedResponseStrategy
+ResponseStrategy <|.. ConservativeStrategy
+ResponseStrategy <|.. WatchAndWaitStrategy
+ResponseAction <|.. IsolateEndpointAction
+ResponseAction <|.. BlockIPAction
+ResponseAction <|.. DisableUserAction
+ResponseAction <|.. QuarantineFileAction
+ResponseAction <|.. EscalateAction
+ResponseActionFactory ..> ResponseAction : creates >
+ResponseAction <|-- ResponseActionDecorator
+ResponseActionDecorator "1" *-- "1" ResponseAction : wraps >
+ResponseActionDecorator <|-- ApprovalGateDecorator
+ResponseActionDecorator <|-- AuditLogDecorator
+ResponseActionDecorator <|-- RollbackCapabilityDecorator
+ResponseActionDecorator <|-- MetricsDecorator
+IncidentResponseFacade --> ResponseStrategy
+IncidentResponseFacade --> ResponseActionFactory
+IncidentResponseFacade --> Incident
+}
+' ============================================================
+' PACKAGE: ingestion — Factory Method + Singleton
+' ============================================================
+package "ingestion (Factory Method + Singleton)" #LightYellow {
+interface AlertNormalizer {
++normalize(rawPayload: JsonNode): CanonicalAlert
++supports(sourceType: AlertSourceType): boolean
+}
+class SplunkNormalizer
+class CrowdStrikeNormalizer
+class FirewallNormalizer
+class CloudSIEMNormalizer
+class AlertNormalizerFactory {
+-{static} normalizers: Map<AlertSourceType, AlertNormalizer>
++{static} register(type: AlertSourceType, normalizer: AlertNormalizer): void
++{static} createNormalizer(sourceType: AlertSourceType): AlertNormalizer
+}
+class IngestionConfigManager {
+-{static} instance: IngestionConfigManager
+-sources: List<AlertSourceConfig>
+-IngestionConfigManager()
++{static} getInstance(): IngestionConfigManager
++getSourceConfig(type: AlertSourceType): AlertSourceConfig
++isIngestionEnabled(type: AlertSourceType): boolean
+}
+AlertNormalizer <|.. SplunkNormalizer
+AlertNormalizer <|.. CrowdStrikeNormalizer
+AlertNormalizer <|.. FirewallNormalizer
+AlertNormalizer <|.. CloudSIEMNormalizer
+AlertNormalizerFactory ..> AlertNormalizer : creates >
+}
+' ============================================================
+' PACKAGE: enrichment — Chain of Responsibility + Abstract Factory
+' ============================================================
+package "enrichment (Chain of Responsibility + Abstract Factory)" #MistyRose {
+abstract class EnrichmentHandler {
+-nextHandler: EnrichmentHandler
++setNext(handler: EnrichmentHandler): EnrichmentHandler
++handle(alert: AlertComponent): EnrichmentResult
++{abstract} doEnrich(alert: AlertComponent): EnrichmentResult
+}
+class DeduplicationHandler {
+-alertCache: AlertCache
++doEnrich(alert: AlertComponent): EnrichmentResult
+}
+class GeoIPHandler {
+-geoService: GeoLocationService
++doEnrich(alert: AlertComponent): EnrichmentResult
+class ThreatIntelHandler {
+-intelService: ThreatIntelService
++doEnrich(alert: AlertComponent): EnrichmentResult
+}
+class AssetContextHandler {
+-assetService: AssetInventoryService
++doEnrich(alert: AlertComponent): EnrichmentResult
+}
+class ClassificationHandler {
+-classifier: RuleBasedClassifier
++doEnrich(alert: AlertComponent): EnrichmentResult
+}
+EnrichmentHandler <|-- DeduplicationHandler
+EnrichmentHandler <|-- GeoIPHandler
+EnrichmentHandler <|-- ThreatIntelHandler
+EnrichmentHandler <|-- AssetContextHandler
+EnrichmentHandler <|-- ClassificationHandler
+EnrichmentHandler "0..1" --> "0..1" EnrichmentHandler : next >
+interface EnrichmentProviderFactory {
++createGeoProvider(): GeoLocationService
++createThreatIntelProvider(): ThreatIntelService
++createAssetProvider(): AssetInventoryService
+}
+class PremiumEnrichmentFactory
+class StandardEnrichmentFactory
+EnrichmentProviderFactory <|.. PremiumEnrichmentFactory
+EnrichmentProviderFactory <|.. StandardEnrichmentFactory
+}
+' ============================================================
+' PACKAGE: threat-intel — Adapter + Proxy
+' ============================================================
+package "threat-intel (Adapter + Proxy)" #LightBlue {
+interface ThreatIntelProvider {
++checkReputation(indicator: String, type: IndicatorType): ReputationResult
++getIndicators(feedType: FeedType): List<ThreatIndicator>
+}
+class VirusTotalAdapter {
+-vtClient: VirusTotalAPI
++checkReputation(indicator: String, type: IndicatorType): ReputationResult
+}
+class MISPAdapter {
+-mispClient: MISPAPI
++checkReputation(indicator: String, type: IndicatorType): ReputationResult
+}
+class CustomFeedAdapter {
+-httpClient: HttpClient
++checkReputation(indicator: String, type: IndicatorType): ReputationResult
+}
+interface ThreatIntelProxy {
++checkReputation(indicator: String, type: IndicatorType): ReputationResult
+}
+class CachingProxy {
+-realProvider: ThreatIntelProvider
+-cache: ThreatIntelCache
++checkReputation(indicator: String, type: IndicatorType): ReputationResult
+class RateLimitProxy {
+-realProvider: ThreatIntelProvider
+-rateLimiter: RateLimiter
++checkReputation(indicator: String, type: IndicatorType): ReputationResult
+}
+class AccessControlProxy {
+-realProvider: ThreatIntelProvider
+-securityManager: SecurityManager
++checkReputation(indicator: String, type: IndicatorType): ReputationResult
+}
+ThreatIntelProvider <|.. VirusTotalAdapter
+ThreatIntelProvider <|.. MISPAdapter
+ThreatIntelProvider <|.. CustomFeedAdapter
+ThreatIntelProxy <|.. CachingProxy
+ThreatIntelProxy <|.. RateLimitProxy
+ThreatIntelProxy <|.. AccessControlProxy
+CachingProxy "1" --> "1" ThreatIntelProvider : delegates >
+RateLimitProxy "1" --> "1" ThreatIntelProvider : delegates >
+AccessControlProxy "1" --> "1" ThreatIntelProvider : delegates >
+}
+' ============================================================
+' PACKAGE: notification — Abstract Factory
+' ============================================================
+package "notification (Abstract Factory)" #Honeydew {
+interface NotificationFactory {
++createEmailNotifier(): EmailNotifier
++createSlackNotifier(): SlackNotifier
++createPagerDutyNotifier(): PagerDutyNotifier
+}
+class EnterpriseNotificationFactory
+class BasicNotificationFactory
+interface Notifier {
++send(notification: Notification): DeliveryResult
+}
+class EmailNotifier
+class SlackNotifier
+class PagerDutyNotifier
+NotificationFactory <|.. EnterpriseNotificationFactory
+NotificationFactory <|.. BasicNotificationFactory
+Notifier <|.. EmailNotifier
+Notifier <|.. SlackNotifier
+Notifier <|.. PagerDutyNotifier
+EnterpriseNotificationFactory ..> EmailNotifier : creates >
+EnterpriseNotificationFactory ..> SlackNotifier : creates >
+EnterpriseNotificationFactory ..> PagerDutyNotifier : creates >
+}
+' ============================================================
+' PACKAGE: events — Observer + Singleton
+' ============================================================
+package "events (Observer + Singleton)" #LightGray {
+interface Subject {
++attach(observer: Observer): void
++detach(observer: Observer): void
++notify(event: DomainEvent): void
+interface Observer {
++update(event: DomainEvent): void
++getObserverId(): String
+}
+class EventBusPublisher {
+-{static} instance: EventBusPublisher
+-observers: Map<String, List<Observer>>
+-EventBusPublisher()
++{static} getInstance(): EventBusPublisher
++attach(eventType: String, observer: Observer): void
++detach(eventType: String, observer: Observer): void
++notify(event: DomainEvent): void
++publishAlertIngested(alert: AlertComponent): void
++publishIncidentStateChanged(incident: Incident): void
++publishResponseActionExecuted(action: ResponseAction): void
+}
+class DashboardUpdater {
+-websocketManager: WebSocketManager
++update(event: DomainEvent): void
+}
+class AuditEventLogger {
+-auditRepository: AuditRepository
++update(event: DomainEvent): void
+}
+class NotificationDispatcher {
+-notificationService: NotificationService
++update(event: DomainEvent): void
+}
+class MetricsCollector {
+-metricsRepository: MetricsRepository
++update(event: DomainEvent): void
+}
+Subject <|.. EventBusPublisher
+Observer <|.. DashboardUpdater
+Observer <|.. AuditEventLogger
+Observer <|.. NotificationDispatcher
+Observer <|.. MetricsCollector
+EventBusPublisher "1" o-- "0..*" Observer : observers >
+}
+' ============================================================
+' PACKAGE: presentation — MVC
+' ============================================================
+package "presentation (MVC)" #AliceBlue {
+class AlertStreamController {
+-alertService: AlertService
++getAlertStream(filters: AlertFilter): SseEmitter
++acknowledgeAlert(alertId: UUID): Response
+}
+class IncidentController {
+-incidentService: IncidentService
++getIncidents(queue: QueueType): Response
++updateIncidentState(id: UUID, action: StateAction): Response
++executeManualAction(id: UUID, action: ResponseAction): Response
+}
+class DashboardController {
+-dashboardService: DashboardService
++getMetrics(): Response
++getRealtimeUpdates(): SseEmitter
+class AlertStreamModel {
+-alerts: List<AlertComponent>
++toViewData(): AlertStreamViewData
+}
+class IncidentQueueModel {
+-incidents: List<Incident>
++toViewData(): IncidentQueueViewData
+}
+class DashboardMetricsModel {
+-metrics: SOCMetrics
++toViewData(): DashboardViewData
+}
+class AlertStreamView
+class IncidentQueueView
+class ResponseConsoleView
+class MetricsDashboardView
+AlertStreamController --> AlertStreamModel
+IncidentController --> IncidentQueueModel
+DashboardController --> DashboardMetricsModel
+AlertStreamModel ..> AlertStreamView
+IncidentQueueModel ..> IncidentQueueView
+DashboardMetricsModel ..> MetricsDashboardView
+}
+' ============================================================
+' CROSS-PACKAGE RELATIONSHIPS
+' ============================================================
+Incident --> AlertComponent : aggregates >
+IncidentResponseFacade --> Incident : orchestrates >
+IncidentResponseFacade --> EventBusPublisher : publishes >
+EnrichmentHandler --> AlertComponent : enriches >
+ThreatIntelHandler --> ThreatIntelProxy : queries >
+AlertNormalizerFactory ..> AlertComponent : produces >
+EventBusPublisher ..> DashboardUpdater : notifies >
+EventBusPublisher ..> AuditEventLogger : notifies >
+EventBusPublisher ..> NotificationDispatcher : notifies >
+@enduml

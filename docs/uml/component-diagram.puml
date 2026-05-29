@@ -1,0 +1,193 @@
+@startuml SDA-Pro_Component_Diagram
+!theme plain
+skinparam componentStyle uml2
+title SDA-Pro — SOA Component & Deployment Architecture
+' ============================================================
+' EXTERNAL ACTORS & SYSTEMS
+' ============================================================
+actor "SOC Analyst" as Analyst
+actor "Security Engineer" as Engineer
+cloud "External Security Infrastructure" {
+[Splunk SIEM] as Splunk
+[CrowdStrike EDR] as CrowdStrike
+[Palo Alto Firewall] as Firewall
+[VirusTotal API] as VT
+[MISP Platform] as MISP
+}
+cloud "Enterprise Systems" {
+[Active Directory] as AD
+[Email Gateway] as Email
+[Slack Workspace] as Slack
+[PagerDuty] as PagerDuty
+}
+' ============================================================
+' INFRASTRUCTURE LAYER
+' ============================================================
+node "Message Bus" #LightGray {
+[RabbitMQ / Kafka] as MessageBus
+}
+node "Data Layer" #LightGray {
+database "PostgreSQL" as Postgres {
+[Incident Records] as IncDB
+[Alert Archive] as AlertDB
+[Audit Logs] as AuditDB
+}
+database "Redis" as Redis {
+[Threat Intel Cache] as TICache
+[Session Store] as SessionCache
+[Rate Limit Counters] as RateCache
+}
+}
+' ============================================================
+' SOA SERVICES
+' ============================================================
+package "Service-Oriented Architecture (SOA) Layer" #LightBlue {
+[Alert Ingestion Service] as AIS <<Service>> #LightCoral
+[Enrichment & Correlation Service] as ECS <<Service>> #LightGreen
+[Incident Management Service] as IMS <<Service>> #LightYellow
+[Response Orchestration Service] as ROS <<Service>> #LightBlue
+[Threat Intel Service] as TIS <<Service>> #LightPink
+[Notification Service] as NS <<Service>> #Honeydew
+[Audit Service] as AS <<Service>> #MistyRose
+[Identity Service] as IS <<Service>> #LightGray
+}
+' ============================================================
+' PRESENTATION LAYER (MVC)
+' ============================================================
+package "SOC Dashboard (MVC)" #AliceBlue {
+[View Layer
+React/Vue Components] as ViewLayer
+[Controller Layer
+REST/WS Handlers] as ControllerLayer
+[Model Layer
+API Clients + DTOs] as ModelLayer
+}
+' ============================================================
+' MIDDLEWARE & CROSS-CUTTING
+' ============================================================
+package "Alert Processing Pipeline (Chain of Responsibility)" #MistyRose {
+[Deduplication Handler] as MH1
+[Geo-IP Handler] as MH2
+[Threat Intel Handler] as MH3
+[Asset Context Handler] as MH4
+[Classification Handler] as MH5
+}
+package "Event Subscribers (Observer)" #Honeydew {
+[Dashboard Updater] as Obs1
+[Audit Logger] as Obs2
+[Notification Dispatcher] as Obs3
+[Metrics Collector] as Obs4
+}
+' ============================================================
+' RELATIONSHIPS — INGESTION (External → Internal)
+' ============================================================
+Splunk ..> AIS : webhook / API poll
+CrowdStrike ..> AIS : streaming API
+Firewall ..> AIS : syslog / webhook
+' ============================================================
+' RELATIONSHIPS — SYNCHRONOUS
+' ============================================================
+Analyst ..> ViewLayer : monitors & responds
+Engineer ..> ViewLayer : configures rules
+ViewLayer --> ControllerLayer : HTTP / WebSocket
+ControllerLayer --> ModelLayer : data binding
+ControllerLayer --> AIS : REST (alert queries)
+ControllerLayer --> IMS : REST (incident CRUD)
+ControllerLayer --> ROS : REST (manual actions)
+ControllerLayer --> AS : REST (audit reports)
+ControllerLayer --> IS : REST (auth)
+AIS --> ECS : gRPC (send normalized alerts)
+ECS --> IMS : gRPC (create incidents)
+ROS --> TIS : gRPC (reputation checks)
+ROS --> NS : REST (dispatch notifications)
+' ============================================================
+' RELATIONSHIPS — MIDDLEWARE PIPELINE
+' ============================================================
+AIS --> MH1 : raw alerts
+MH1 --> MH2
+MH2 --> MH3
+MH3 --> MH4
+MH4 --> MH5
+MH5 --> ECS : enriched alerts
+' ============================================================
+' RELATIONSHIPS — THREAT INTEL EXTERNAL
+' ============================================================
+TIS --> VT : HTTPS (Adapter)
+TIS --> MISP : HTTPS (Adapter)
+TIS --> Redis : cache lookups
+' ============================================================
+' RELATIONSHIPS — NOTIFICATION EXTERNAL
+' ============================================================
+NS --> Email : SMTP (Adapter)
+NS --> Slack : HTTPS (Adapter)
+NS --> PagerDuty : HTTPS (Adapter)
+' ============================================================
+' RELATIONSHIPS — ASYNCHRONOUS / EVENT-DRIVEN
+' ============================================================
+AIS ..> MessageBus : AlertIngested
+ECS ..> MessageBus : AlertEnriched, IncidentCorrelated
+IMS ..> MessageBus : IncidentCreated, IncidentStateChanged
+ROS ..> MessageBus : ResponseActionExecuted
+TIS ..> MessageBus : ThreatIntelUpdated
+MessageBus ..> Obs1 : push to dashboard
+MessageBus ..> Obs2 : write audit trail
+MessageBus ..> Obs3 : trigger alerts
+MessageBus ..> Obs4 : update metrics
+Obs1 --> ViewLayer : WebSocket/SSE push
+Obs2 --> AS : persist audit
+Obs3 --> NS : dispatch notification
+Obs4 --> AS : write time-series
+' ============================================================
+' DATA ACCESS
+' ============================================================
+AIS ..> AlertDB : writes normalized alerts
+ECS ..> AlertDB : reads/writes enriched data
+ECS ..> IncDB : writes incident clusters
+IMS ..> IncDB : reads/writes incident lifecycle
+AS ..> AuditDB : immutable writes
+IS ..> Redis : session tokens
+TIS ..> TICache : cache reputation scores
+' ============================================================
+' ARCHITECTURAL ANNOTATIONS
+' ============================================================
+note right of AIS
+<b>Alert Ingestion Service</b>
+• Singleton: IngestionConfigManager
+• Factory Method: AlertNormalizerFactory
+• Composite: Alert tree structure
+end note
+note right of ECS
+<b>Enrichment & Correlation</b>
+• Chain of Responsibility: 5 enrichment handlers
+• Composite: Campaign/Cluster traversal
+• Strategy: Correlation algorithms
+• Abstract Factory: EnrichmentProviderFactory
+end note
+note right of IMS
+<b>Incident Management</b>
+• State: 7 incident lifecycle states
+with state-specific behavior
+end note
+note right of ROS
+<b>Response Orchestration</b>
+• Facade: IncidentResponseFacade
+• Strategy: 4 response strategies
+• Decorator: Audit, Approval, Rollback
+• Proxy: Access control for actions
+end note
+note right of TIS
+<b>Threat Intel</b>
+• Adapter: VirusTotal, MISP, custom feeds
+• Proxy: Cache, RateLimit, AccessControl
+end note
+note bottom of MessageBus
+<b>Event-Driven Backbone</b>
+Physical implementation of Observer pattern.
+Publishers do not know subscribers.
+end note
+note left of MH1
+<b>Chain of Responsibility</b>
+Deduplicate → GeoIP → ThreatIntel
+→ AssetContext → Classification
+end note
+@enduml
