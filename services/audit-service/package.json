@@ -1,6 +1,12 @@
 {
   "name": "sda-pro-audit-service",
   "version": "1.0.0",
-  "description": "Audit Service with immutable logging",
-  "main": "src/services/AuditService.js"
+  "description": "Audit Service with immutable logging for compliance",
+  "main": "src/services/AuditService.js",
+  "scripts": {
+    "start": "node src/services/AuditService.js",
+    "test": "jest"
+  },
+  "dependencies": {},
+  "devDependencies": {}
 }
