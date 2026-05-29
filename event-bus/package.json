@@ -1,0 +1,11 @@
+{
+  "name": "sda-pro-event-bus",
+  "version": "1.0.0",
+  "description": "Event Bus with Singleton and Observer patterns",
+  "main": "src/publisher/EventBusPublisher.js",
+  "scripts": {
+    "test": "node test.js"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
