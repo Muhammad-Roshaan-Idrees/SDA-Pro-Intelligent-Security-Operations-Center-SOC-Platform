@@ -1,0 +1,12 @@
+{
+  "name": "sda-pro-identity-service",
+  "version": "1.0.0",
+  "description": "Identity Service for authentication and authorization",
+  "main": "src/services/IdentityService.js",
+  "scripts": {
+    "start": "node src/services/IdentityService.js",
+    "test": "jest"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
