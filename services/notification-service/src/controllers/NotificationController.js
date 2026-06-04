@@ -1,74 +1,39 @@
-// PATTERN: MVC (Controller)
-// RATIONALE: Handles HTTP requests for notifications
+// notification-service/src/controllers/NotificationController.js
+
+const EnterpriseNotificationFactory = require('../services/EnterpriseNotificationFactory');
+const BasicNotificationFactory      = require('../services/BasicNotificationFactory');
+const NotificationService           = require('../services/NotificationService');
+const { Priority }                  = require('../channels/Notification');
 
 class NotificationController {
-    constructor(notificationService) {
-        this.notificationService = notificationService;
-    }
+  constructor(tier = 'enterprise') {
+    const factory = tier === 'enterprise' ? new EnterpriseNotificationFactory() : new BasicNotificationFactory();
+    this._service = new NotificationService(factory);
+  }
 
-    async dispatchNotification(req, res) {
-        try {
-            const { channel, to, subject, message, severity, incidentId } = req.body;
-            
-            const result = await this.notificationService.dispatch({
-                channel,
-                to,
-                subject,
-                message,
-                severity,
-                incidentId
-            });
-            
-            res.json({
-                success: true,
-                data: result,
-                timestamp: new Date().toISOString()
-            });
-        } catch (error) {
-            res.status(500).json({ success: false, error: error.message });
-        }
-    }
+  dispatch(subject, body, email, slack, priority) {
+    console.log('\n[NotificationController] POST /notifications/dispatch');
+    return this._service.dispatchAllChannels(subject, body, email, slack, priority);
+  }
+}
 
-    async dispatchToAll(req, res) {
-        try {
-            const { to, subject, message, severity, incidentId } = req.body;
-            
-            const results = await this.notificationService.dispatchToAll({
-                to,
-                subject,
-                message,
-                severity,
-                incidentId
-            });
-            
-            res.json({
-                success: true,
-                data: results,
-                timestamp: new Date().toISOString()
-            });
-        } catch (error) {
-            res.status(500).json({ success: false, error: error.message });
-        }
-    }
+// ── Demo ──────────────────────────────────────────────────────────────────────
+if (require.main === module) {
+  console.log('=== SDA-Pro: Notification Service ===\n');
 
-    async getHistory(req, res) {
-        try {
-            const { limit = 50 } = req.query;
-            const history = await this.notificationService.getDeliveryHistory(limit);
-            res.json({ success: true, data: history });
-        } catch (error) {
-            res.status(500).json({ success: false, error: error.message });
-        }
-    }
+  console.log('--- Enterprise Factory ---');
+  const enterprise = new NotificationController('enterprise');
+  enterprise.dispatch('CRITICAL: Ransomware Detected', 'Host WIN-PROD-01 isolated.',
+    'soc@enterprise.com', '#soc-critical', Priority.CRITICAL)
+    .forEach(r => console.log(' ', JSON.stringify(r)));
 
-    async getStats(req, res) {
-        try {
-            const stats = await this.notificationService.getStats();
-            res.json({ success: true, data: stats });
-        } catch (error) {
-            res.status(500).json({ success: false, error: error.message });
-        }
-    }
+  console.log('\n--- Basic Factory (same code, different factory) ---');
+  const basic = new NotificationController('basic');
+  basic.dispatch('MEDIUM: Brute Force', '20 failed SSH logins.',
+    'admin@company.com', '#general-alerts', Priority.MEDIUM)
+    .forEach(r => console.log(' ', JSON.stringify(r)));
+
+  console.log('\n=== Notification Service demo complete ===');
 }
 
 module.exports = NotificationController;
