@@ -3,5 +3,4 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install --production || true
 COPY . /app
-EXPOSE 3002
-CMD ["node", "src/server.js"]
+CMD ["node", "src/run.js"]

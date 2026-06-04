@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>SOC Dashboard - Live Demo</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    #events { white-space: pre-wrap; background:#111; color:#0f0; padding:10px; height:300px; overflow:auto }
+    .controls { margin-bottom:10px }
+  </style>
+  <script>
+    let useWs = true;
+    function connect() {
+      document.getElementById('events').textContent = '';
+      if (useWs && window.WebSocket) {
+        const ws = new WebSocket((location.protocol === 'https:'? 'wss://' : 'ws://') + location.host);
+        ws.onopen = () => append('WS connected');
+        ws.onmessage = (m) => append('WS: ' + m.data);
+        ws.onclose = () => append('WS closed');
+        window._active = ws;
+      } else {
+        const es = new EventSource('/events');
+        es.onopen = () => append('SSE connected');
+        es.onmessage = (m) => append('SSE: ' + m.data);
+        es.onerror = () => append('SSE error');
+        window._active = es;
+      }
+    }
+    function append(txt) { const el = document.getElementById('events'); el.textContent = new Date().toISOString() + ' - ' + txt + '\n' + el.textContent; }
+    function createIncident() {
+      fetch('/incidents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:'Demo incident',severity:'MEDIUM'})})
+      .then(r=>r.json()).then(j=>append('Created: ' + JSON.stringify(j.data))).catch(e=>append('Create failed:'+e))
+    }
+    function toggle() { useWs = !useWs; document.getElementById('mode').textContent = useWs? 'WebSocket' : 'SSE'; }
+    window.addEventListener('load', () => { document.getElementById('mode').textContent = useWs? 'WebSocket' : 'SSE'; connect(); });
+  </script>
+</head>
+<body>
+  <h1>SOC Dashboard — Live Demo</h1>
+  <div class="controls">
+    <button onclick="createIncident()">Create Incident</button>
+    <button onclick="(window._active && window._active.close && window._active.close())">Disconnect</button>
+    <button onclick="toggle();(window._active && window._active.close && window._active.close());connect()">Toggle WS/SSE (<span id="mode"></span>)</button>
+  </div>
+  <div id="events">Connecting…</div>
+</body>
+</html>

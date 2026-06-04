@@ -1,0 +1,29 @@
+version: '3.8'
+services:
+  event-bus:
+    build:
+      context: ./event-bus
+    container_name: sda_event_bus
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: ./services/notification-service/Dockerfile
+    container_name: sda_notification
+
+  audit-service:
+    build:
+      context: .
+      dockerfile: ./services/audit-service/Dockerfile
+    container_name: sda_audit
+
+  soc-dashboard:
+    build:
+      context: ./soc-dashboard
+    ports:
+      - "3002:3002"
+    depends_on:
+      - event-bus
+      - notification-service
+      - audit-service
+    container_name: sda_dashboard
