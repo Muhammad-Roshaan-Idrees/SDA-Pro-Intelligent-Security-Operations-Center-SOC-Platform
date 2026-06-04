@@ -1,18 +1,8 @@
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-=======
-=======
->>>>>>> Stashed changes
 {
   "name": "soc-dashboard",
   "version": "1.0.0",
-<<<<<<< Updated upstream
-  "description": "SOC Analyst Dashboard with MVC pattern",
-  "main": "src/controllers/IncidentController.js",
-=======
   "description": "Intelligent SOC Analyst Dashboard",
   "main": "src/server.js",
->>>>>>> Stashed changes
   "scripts": {
     "start": "node src/server.js",
     "test": "node tests/integration.js"
@@ -23,7 +13,3 @@
     "ws": "^8.21.0"
   }
 }
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
