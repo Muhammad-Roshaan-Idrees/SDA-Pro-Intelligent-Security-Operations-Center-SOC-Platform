@@ -1,10 +1,10 @@
 // DashboardService: bridges EventBus -> dashboard listeners, audit, notifications
-const EventBusPublisher = require('../../event-bus/src/publisher/EventBusPublisher');
+const EventBusPublisher = require('../../../event-bus/src/publisher/EventBusPublisher');
 
-const AuditServiceClass = require('../../services/audit-service/src/services/AuditService');
-const AuditRepository = require('../../services/audit-service/src/repositories/AuditRepository');
-const NotificationService = require('../../services/notification-service/src/services/NotificationService');
-const NotificationDispatcher = require('../../event-bus/src/subscribers/NotificationDispatcher');
+const AuditServiceClass = require('../../../services/audit-service/src/services/AuditService');
+const AuditRepository = require('../../../services/audit-service/src/repositories/AuditRepository');
+const NotificationService = require('../../../services/notification-service/src/services/NotificationService');
+const NotificationDispatcher = require('../../../event-bus/src/subscribers/NotificationDispatcher');
 
 class DashboardService {
     constructor(incidentService = null) {

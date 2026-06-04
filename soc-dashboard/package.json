@@ -4,7 +4,7 @@
 =======
 >>>>>>> feature/C-dashboard-observer
 {
-  "name": "sda-pro-dashboard",
+  "name": "soc-dashboard",
   "version": "1.0.0",
   "description": "SOC Analyst Dashboard with MVC pattern",
 <<<<<<< HEAD
@@ -17,7 +17,9 @@
     "test": "node tests/integration.js"
   },
   "dependencies": {
-    "ws": "^8.13.0"
+    "express": "^4.19.2",
+    "dotenv": "^16.4.5",
+    "ws": "^8.17.0"
   }
 }
 >>>>>>> Stashed changes
