@@ -1,0 +1,16 @@
+<<<<<<< Updated upstream
+=======
+{
+  "name": "sda-pro-dashboard",
+  "version": "1.0.0",
+  "description": "SOC Analyst Dashboard with MVC pattern",
+  "main": "src/controllers/IncidentController.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node tests/integration.js"
+  },
+  "dependencies": {
+    "ws": "^8.13.0"
+  }
+}
+>>>>>>> Stashed changes
